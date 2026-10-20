@@ -4,6 +4,8 @@ import {
   BinarySearchDiagram, MonotonicStackDiagram, StackQueueDiagram,
   SieveDiagram, FastPowerDiagram, PascalTriangle,
   FibTreeDiagram, MasterThmTree, CallStackDiagram,
+  SolidSrpDiagram, SolidOcpDiagram, SolidLspDiagram, SolidIspDiagram, SolidDipDiagram,
+  InputDecisionDiagram, InterviewFlowDiagram,
 } from './Diagrams.jsx';
 
 // ─── Base primitives ──────────────────────────────────────────────────────────
@@ -244,6 +246,22 @@ const NAV = [
   { id: 's-tc-space',    label: '5.3 Space Complexity' },
   { id: 's-tc-amort',    label: '5.4 Amortized Analysis' },
   { id: 's-tc-table',    label: '5.5 Algorithm Reference' },
+  { id: 'part6',         label: 'Part 6 · SOLID', section: true },
+  { id: 's-solid-table', label: '6.0 Quick Reference' },
+  { id: 's-solid-srp',   label: '6.1 Single Responsibility' },
+  { id: 's-solid-ocp',   label: '6.2 Open / Closed' },
+  { id: 's-solid-lsp',   label: '6.3 Liskov Substitution' },
+  { id: 's-solid-isp',   label: '6.4 Interface Segregation' },
+  { id: 's-solid-dip',   label: '6.5 Dependency Inversion' },
+  { id: 'part7',         label: 'Part 7 · Interview Tips', section: true },
+  { id: 's-io-scanner',  label: '7.1 Input: Scanner' },
+  { id: 's-io-fast',     label: '7.2 Input: Fast Reader' },
+  { id: 's-io-types',    label: '7.3 Reading Every Type' },
+  { id: 's-io-output',   label: '7.4 Fast Output' },
+  { id: 's-tips-flow',   label: '7.5 Interview Flow' },
+  { id: 's-tips-edge',   label: '7.6 Edge Case Checklist' },
+  { id: 's-tips-java',   label: '7.7 Java Pitfalls' },
+  { id: 's-tips-tmpl',   label: '7.8 Solution Template' },
 ];
 
 function Sidebar({ active }) {
@@ -791,6 +809,403 @@ const CODE_TC_AMORT = `// ── ArrayList.add — O(1) AMORTIZED despite occasi
 // ── What "amortized" does NOT mean ────────────────────────────────────────────
 // It does NOT mean "on average for random inputs."
 // Amortized O(1) holds for ANY sequence of operations in the worst case.`;
+
+// ─── Part 6 code strings (SOLID) ──────────────────────────────────────────────
+
+const CODE_SRP_BAD = `// ✗ One class does four jobs: data, business rule, persistence, presentation
+class Invoice {
+    private final List<Double> lineItems = new ArrayList<>();
+
+    double total() {                                              // business rule
+        return lineItems.stream().mapToDouble(Double::doubleValue).sum() * 1.18;
+    }
+    void saveToDatabase(Connection conn) throws SQLException {    // persistence
+        PreparedStatement ps = conn.prepareStatement("INSERT INTO invoices(total) VALUES (?)");
+        ps.setDouble(1, total());
+        ps.executeUpdate();
+    }
+    void printHtml() {                                            // presentation
+        System.out.println("<h1>Invoice</h1><p>Total: " + total() + "</p>");
+    }
+}
+// A tax change, a schema change and a layout change all edit the same class.`;
+
+const CODE_SRP_GOOD = `// ✓ Each class has exactly one reason to change  (records need Java 16+)
+record Invoice(List<Double> lineItems) { }                        // pure data
+
+class TaxCalculator {                                             // changes when tax rules change
+    static final double GST = 1.18;
+    double total(Invoice inv) {
+        return inv.lineItems().stream().mapToDouble(Double::doubleValue).sum() * GST;
+    }
+}
+
+class InvoiceRepository {                                         // changes when storage changes
+    void save(double total, Connection conn) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement("INSERT INTO invoices(total) VALUES (?)")) {
+            ps.setDouble(1, total);
+            ps.executeUpdate();
+        }
+    }
+}
+
+class InvoicePrinter {                                            // changes when layout changes
+    String toHtml(double total) {
+        return "<h1>Invoice</h1><p>Total: " + total + "</p>";
+    }
+}`;
+
+const CODE_OCP_BAD = `// ✗ Every new discount type forces an edit (and a regression test) of this method
+class DiscountCalculator {
+    double discount(String customerType, double price) {
+        if (customerType.equals("REGULAR"))      return price * 0.05;
+        else if (customerType.equals("PREMIUM")) return price * 0.15;
+        else if (customerType.equals("VIP"))     return price * 0.25;
+        // adding "SEASONAL" means editing this class again
+        return 0;   // a typo in the string silently gives no discount
+    }
+}`;
+
+const CODE_OCP_GOOD = `// ✓ Closed for modification, open for extension
+interface DiscountPolicy {
+    double apply(double price);
+}
+
+class RegularDiscount implements DiscountPolicy {
+    public double apply(double price) { return price * 0.05; }
+}
+
+class PremiumDiscount implements DiscountPolicy {
+    public double apply(double price) { return price * 0.15; }
+}
+
+class SeasonalDiscount implements DiscountPolicy {        // new feature = new class, zero edits above
+    public double apply(double price) { return price * 0.20; }
+}
+
+class DiscountCalculator {                                // never changes again
+    double discount(DiscountPolicy policy, double price) {
+        return policy.apply(price);
+    }
+}`;
+
+const CODE_LSP_BAD = `// ✗ Square silently breaks the independence of Rectangle's setters
+class Rectangle {
+    protected int width, height;
+    void setWidth(int w)  { width = w; }
+    void setHeight(int h) { height = h; }
+    int area()            { return width * height; }
+}
+
+class Square extends Rectangle {
+    @Override void setWidth(int w)  { width = height = w; }   // surprise side effect
+    @Override void setHeight(int h) { width = height = h; }   // surprise side effect
+}
+
+// Client code that is correct for Rectangle but wrong for Square:
+Rectangle r = new Square();
+r.setWidth(5);
+r.setHeight(4);
+System.out.println(r.area());   // prints 16 — the caller expected 20`;
+
+const CODE_LSP_GOOD = `// ✓ Model the shared behaviour, not the shared shape
+interface Shape {
+    int area();
+}
+
+record Rectangle(int width, int height) implements Shape {   // immutable: no setters to break
+    public int area() { return width * height; }
+}
+
+record Square(int side) implements Shape {
+    public int area() { return side * side; }
+}
+
+// Client depends only on Shape; every implementation honours area()
+int totalArea(List<Shape> shapes) {
+    return shapes.stream().mapToInt(Shape::area).sum();
+}`;
+
+const CODE_ISP_BAD = `// ✗ Fat interface: every implementer must support every method
+interface Worker {
+    void work();
+    void eat();
+    void sleep();
+}
+
+class Human implements Worker {
+    public void work()  { /* ... */ }
+    public void eat()   { /* ... */ }
+    public void sleep() { /* ... */ }
+}
+
+class Robot implements Worker {
+    public void work()  { /* ... */ }
+    public void eat()   { throw new UnsupportedOperationException(); }   // forced to lie
+    public void sleep() { throw new UnsupportedOperationException(); }   // forced to lie
+}`;
+
+const CODE_ISP_GOOD = `// ✓ Small, role-based interfaces — implement only what you actually do
+interface Workable  { void work(); }
+interface Eatable   { void eat(); }
+interface Sleepable { void sleep(); }
+
+class Human implements Workable, Eatable, Sleepable {
+    public void work()  { /* ... */ }
+    public void eat()   { /* ... */ }
+    public void sleep() { /* ... */ }
+}
+
+class Robot implements Workable {                 // no fake methods
+    public void work() { /* ... */ }
+}
+
+// Callers ask for the role they need
+void assignShift(Workable w) { w.work(); }        // accepts both Human and Robot`;
+
+const CODE_DIP_BAD = `// ✗ High-level OrderService creates and depends on a concrete low-level class
+class StripeGateway {
+    void charge(double amount) { /* calls Stripe's SDK */ }
+}
+
+class OrderService {
+    private final StripeGateway gateway = new StripeGateway();   // hard-wired
+    void checkout(Order order) {
+        gateway.charge(order.total());
+    }
+}
+// Testing checkout() now hits the real Stripe API.
+// Switching to PayPal means rewriting OrderService.`;
+
+const CODE_DIP_GOOD = `// ✓ Both sides depend on an abstraction; the concrete class is injected
+interface PaymentGateway {
+    void charge(double amount);
+}
+
+class StripeGateway implements PaymentGateway {
+    public void charge(double amount) { /* Stripe SDK */ }
+}
+
+class PayPalGateway implements PaymentGateway {
+    public void charge(double amount) { /* PayPal SDK */ }
+}
+
+class OrderService {
+    private final PaymentGateway gateway;                  // depends on the abstraction
+    OrderService(PaymentGateway gateway) {                 // constructor injection
+        this.gateway = gateway;
+    }
+    void checkout(Order order) {
+        gateway.charge(order.total());
+    }
+}
+// Production: new OrderService(new StripeGateway())
+// Tests:      new OrderService(amount -> recorded.add(amount))   // PaymentGateway has one method`;
+
+// ─── Part 7 code strings (interview tips) ─────────────────────────────────────
+
+const CODE_IO_SCANNER = `import java.util.*;
+
+Scanner sc = new Scanner(System.in);
+int n     = sc.nextInt();          // next token as int
+long big  = sc.nextLong();
+double d  = sc.nextDouble();
+String w  = sc.next();             // next whitespace-delimited token (no spaces)
+
+sc.nextLine();                     // IMPORTANT: eat the leftover newline after nextInt()
+String line = sc.nextLine();       // full line, spaces included
+
+int[] arr = new int[n];
+for (int i = 0; i < n; i++) arr[i] = sc.nextInt();
+
+while (sc.hasNextInt()) {          // read until EOF safely
+    int x = sc.nextInt();
+}
+sc.close();`;
+
+const CODE_IO_FAST = `import java.io.*;
+import java.util.*;
+
+public class Main {
+    public static void main(String[] args) throws IOException {
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+
+        StringTokenizer st = new StringTokenizer(br.readLine());   // first line
+        int n = Integer.parseInt(st.nextToken());
+        long k = Long.parseLong(st.nextToken());
+
+        st = new StringTokenizer(br.readLine());                   // second line
+        int[] arr = new int[n];
+        for (int i = 0; i < n; i++) arr[i] = Integer.parseInt(st.nextToken());
+
+        String line = br.readLine();                               // full line, spaces kept
+    }
+}`;
+
+const CODE_IO_FASTREADER = `// Reusable token reader — works even when one value's tokens span several lines.
+// Paste as a nested static class in Main.
+static class FastReader {
+    private final BufferedReader br;
+    private StringTokenizer st;
+
+    FastReader(InputStream in) { br = new BufferedReader(new InputStreamReader(in)); }
+
+    String next() throws IOException {
+        while (st == null || !st.hasMoreTokens()) {
+            String line = br.readLine();
+            if (line == null) throw new EOFException();
+            st = new StringTokenizer(line);
+        }
+        return st.nextToken();
+    }
+
+    int nextInt()       throws IOException { return Integer.parseInt(next()); }
+    long nextLong()     throws IOException { return Long.parseLong(next()); }
+    double nextDouble() throws IOException { return Double.parseDouble(next()); }
+
+    // Only safe when no tokens are pending on the current line
+    String nextLine()   throws IOException { return br.readLine(); }
+}`;
+
+const CODE_IO_TYPES = `// ── Single values ────────────────────────────────────────────────────────────
+int n = fr.nextInt();
+long big = fr.nextLong();
+double x = fr.nextDouble();
+String word = fr.next();                 // no spaces inside
+String sentence = fr.nextLine();         // may contain spaces (use only on a fresh line)
+char first = fr.next().charAt(0);        // a single character
+
+// ── 1-D array (one line of n values) ─────────────────────────────────────────
+int[] a = new int[n];
+for (int i = 0; i < n; i++) a[i] = fr.nextInt();
+
+// ── 2-D numeric grid (r rows, c columns) ─────────────────────────────────────
+int[][] g = new int[r][c];
+for (int i = 0; i < r; i++)
+    for (int j = 0; j < c; j++)
+        g[i][j] = fr.nextInt();
+
+// ── Character grid, e.g. maze of '#' and '.' (one row per line, no spaces) ──
+char[][] maze = new char[r][];
+for (int i = 0; i < r; i++) maze[i] = fr.next().toCharArray();
+
+// ── Unweighted graph: m edges, nodes numbered 1..n ───────────────────────────
+List<List<Integer>> adj = new ArrayList<>();
+for (int i = 0; i <= n; i++) adj.add(new ArrayList<>());   // index 0 unused
+for (int i = 0; i < m; i++) {
+    int u = fr.nextInt(), v = fr.nextInt();
+    adj.get(u).add(v);
+    adj.get(v).add(u);                  // drop this line for a directed graph
+}
+
+// ── Weighted edge list: u v w per line ───────────────────────────────────────
+int[][] edges = new int[m][3];
+for (int i = 0; i < m; i++) {
+    edges[i][0] = fr.nextInt();
+    edges[i][1] = fr.nextInt();
+    edges[i][2] = fr.nextInt();
+}
+
+// ── Multiple test cases (first line is t) ────────────────────────────────────
+int t = fr.nextInt();
+while (t-- > 0) {
+    int len = fr.nextInt();
+    // reset ALL arrays and collections here — they must not carry over
+}
+
+// ── Read until end of input ──────────────────────────────────────────────────
+try {
+    while (true) {
+        int x = fr.nextInt();
+        // process x
+    }
+} catch (EOFException e) {
+    // input finished
+}`;
+
+const CODE_IO_OUTPUT = `import java.io.*;
+import java.util.*;
+
+// ✗ Slow: System.out.println inside a loop flushes often
+for (int x : res) System.out.println(x);
+
+// ✓ Build the whole output once, print once
+StringBuilder sb = new StringBuilder();
+for (int x : res) sb.append(x).append('\\n');
+System.out.print(sb);
+
+// ✓ PrintWriter over BufferedWriter — fast, supports printf
+PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(System.out)));
+out.println(answer);
+out.printf("%.6f%n", value);        // fixed decimal places
+out.println(Arrays.toString(arr));  // quick debug print of an array
+out.flush();                         // IMPORTANT: without flush(), nothing appears`;
+
+const CODE_TIPS_TEMPLATE = `import java.io.*;
+import java.util.*;
+
+public class Main {
+    static FastReader fr;
+
+    public static void main(String[] args) throws IOException {
+        fr = new FastReader(System.in);
+        PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(System.out)));
+
+        int t = fr.nextInt();                  // or remove if there is one test case
+        while (t-- > 0) {
+            out.println(solve());
+        }
+        out.flush();
+    }
+
+    static String solve() throws IOException {
+        int n = fr.nextInt();
+        int[] a = new int[n];
+        for (int i = 0; i < n; i++) a[i] = fr.nextInt();
+
+        long answer = 0;                       // long for sums that may overflow int
+        // ... your logic ...
+        return String.valueOf(answer);
+    }
+
+    // paste FastReader here (see 7.2)
+}`;
+
+const CODE_TIPS_DEEP = `// Deep recursion (DFS on 10^5 nodes) can overflow Java's default stack.
+// Option 1: run the solver on a thread with a large stack.
+public static void main(String[] args) {
+    new Thread(null, () -> {
+        try { solve(); } catch (IOException e) { throw new UncheckedIOException(e); }
+    }, "main", 1 << 26).start();          // 64 MB stack
+}
+
+// Option 2: convert the recursion to an explicit stack / BFS (see Part 3, Graph and Tree rows).`;
+
+const CODE_TIPS_PITFALLS = `// 1. Overflow — widen BEFORE multiplying or summing
+long prod = (long) a * b;
+long sum  = 0; for (int x : arr) sum += x;      // sum is long, x is int
+
+// 2. Arrays.sort on int[] has a worst case O(n²) that can be triggered on purpose.
+//    In contests, shuffle first, or sort an Integer[] / List<Integer> instead.
+// Collections.shuffle wants a List, so use an Integer[] or List<Integer>:
+List<Integer> list = new ArrayList<>(...);
+Collections.shuffle(list);
+Collections.sort(list);
+
+// 3. list.remove(int) removes by INDEX; remove(Object) removes by VALUE
+list.remove(Integer.valueOf(5));    // remove the value 5
+list.remove(0);                     // remove the element at index 0
+
+// 4. Arrays as HashMap keys use identity, not content
+Map<String, Integer> m = new HashMap<>();
+m.put(Arrays.toString(arr), 1);     // use a string or List.of(...) as the key
+
+// 5. Ternary + boxing can throw NullPointerException
+Integer v = null;
+int bad = true ? v : 0;             // NPE — v is unboxed
+// 6. Use ArrayDeque, not LinkedList, as a queue or stack (Part 1.3)
+// 7. HashMap iteration order is NOT guaranteed; sort keys if order matters
+// 8. Compare strings with equals(), not ==; compare Integer objects with equals()`;
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -1492,6 +1907,395 @@ export default function CheatSheet() {
               <TR cells={['Backtracking (subsets)', <Mono>O(2ⁿ)</Mono>, <Mono>O(n)</Mono>, 'Each element in or out']} />
               <TR cells={['Backtracking (permutations)', <Mono>O(n!)</Mono>, <Mono>O(n)</Mono>, 'n choices × (n-1) × …']} />
             </CheatTable>
+          </MathCard>
+
+        </section>
+
+        {/* ══════════════════════  PART 6  ══════════════════════ */}
+        <section id="part6" className="mb-14 scroll-mt-4">
+          <PartHeading badge="Part 6" id="part6">SOLID Principles</PartHeading>
+
+          <div id="s-solid-table" className="scroll-mt-4">
+            <SectionH>6.0 Quick Reference</SectionH>
+            <CheatTable headers={['Principle', 'Smell (the violation)', 'Fix']}>
+              <TR cells={[<><strong>S</strong> — Single Responsibility</>, 'One class changes for several unrelated reasons (logic + DB + UI)', 'Split by reason to change']} />
+              <TR cells={[<><strong>O</strong> — Open / Closed</>, 'Adding a feature means editing an if/else or switch on type', 'Polymorphism / Strategy']} />
+              <TR cells={[<><strong>L</strong> — Liskov Substitution</>, 'Subclass throws, ignores, or changes base-method meaning; callers use instanceof', 'Share an interface; do not inherit for "looks like is-a"']} />
+              <TR cells={[<><strong>I</strong> — Interface Segregation</>, 'Implementers throw UnsupportedOperationException or leave methods empty', 'Several small role interfaces']} />
+              <TR cells={[<><strong>D</strong> — Dependency Inversion</>, 'new ConcreteClass() inside business logic', 'Depend on an interface; inject it']} />
+            </CheatTable>
+          </div>
+
+          <MathCard id="s-solid-srp" title="6.1 Single Responsibility Principle (SRP)" badge="S">
+            <Theory>
+              <p>
+                <strong>The idea:</strong> a class should have <strong>one reason to change</strong>. A "reason" is a
+                stakeholder or concern. The tax rule, the database schema and the HTML layout are three different reasons,
+                so they belong in three different classes.
+              </p>
+              <p>
+                <strong>Analogy:</strong> a restaurant kitchen where the chef also takes payments, cleans tables and
+                manages the bank account. Every new rush hour breaks something. Splitting the roles (cook, cashier,
+                cleaner) lets each one change without disturbing the others.
+              </p>
+              <p>
+                <strong>Why it matters:</strong> the cost of mixing responsibilities is <strong>collateral damage</strong>.
+                Editing the print method can break the save method when both live in one file and share fields. Each class
+                also becomes harder to test, because a unit test for a tax calculation should not need a database.
+              </p>
+              <p>
+                <strong>How to spot it:</strong> name the class with a noun for <em>one</em> thing. If the name needs
+                "and", "Manager" or "Handler" to cover everything it does, it is probably doing too much.
+              </p>
+              <p>
+                <strong>Common misunderstanding:</strong> SRP does not mean "one method per class". A class can have many
+                methods as long as they all serve the same reason to change. Also, SRP is not about splitting into tiny
+                pieces for their own sake; split when a second reason to change actually appears.
+              </p>
+            </Theory>
+            <WhenToUse items={[
+              'A class imports both java.sql and javax.swing (or both a DB driver and an HTTP client)',
+              'A method name contains "and": calculateAndSave(), formatAndEmail()',
+              'Unit tests need a database running just to test a calculation',
+              'One small requirement change touches many unrelated methods in the same class',
+            ]} />
+            <SolidSrpDiagram />
+            <CodeBlock label="✗ Violation" code={CODE_SRP_BAD} />
+            <CodeBlock label="✓ Fix" code={CODE_SRP_GOOD} />
+          </MathCard>
+
+          <MathCard id="s-solid-ocp" title="6.2 Open / Closed Principle (OCP)" badge="O">
+            <Theory>
+              <p>
+                <strong>The idea:</strong> software entities should be <strong>open for extension</strong> but
+                <strong> closed for modification</strong>. Once a class is tested and in production, new behaviour should
+                arrive as a <em>new</em> class, not as another branch inside an existing one.
+              </p>
+              <p>
+                <strong>Analogy:</strong> a power strip. You add a new device by plugging it into a free socket; you do not
+                rewire the wall. The strip (the stable code) never changes, and the devices (the variants) are the parts
+                that vary.
+              </p>
+              <p>
+                <strong>How it is done:</strong> define an interface for the part that varies, let each variant implement
+                it, and make the stable code depend only on the interface. Polymorphism does the branching that
+                <IC>if/else</IC> used to do. This is the classic <strong>Strategy pattern</strong>.
+              </p>
+              <p>
+                <strong>Why it matters:</strong> every edit to a working method risks regressions in branches that had
+                nothing to do with the change. With OCP, a new variant is covered by its own tests, and the old tests keep
+                guarding the old code untouched.
+              </p>
+              <p>
+                <strong>Common misunderstanding:</strong> do not abstract everything up front. Start with a plain
+                <IC>if</IC>. Refactor to OCP when the second or third variant appears, because guessing future
+                extension points usually produces wrong abstractions.
+              </p>
+            </Theory>
+            <WhenToUse items={[
+              'A switch or if/else chain on a type string, enum or class tag',
+              'Business rules that change per customer, region, or plan (pricing, tax, shipping)',
+              'Plugins: new report format, new export type, new notification channel',
+              'Every new requirement forces a regression test of unrelated branches',
+            ]} />
+            <SolidOcpDiagram />
+            <CodeBlock label="✗ Violation" code={CODE_OCP_BAD} />
+            <CodeBlock label="✓ Fix" code={CODE_OCP_GOOD} />
+          </MathCard>
+
+          <MathCard id="s-solid-lsp" title="6.3 Liskov Substitution Principle (LSP)" badge="L">
+            <Theory>
+              <p>
+                <strong>The idea:</strong> if code is written against a base type <IC>T</IC>, it must keep working when
+                given any subtype <IC>S</IC>, without the caller knowing the difference. Inheritance is a
+                <strong> behavioural</strong> promise, not just a shape or taxonomy promise.
+              </p>
+              <p>
+                <strong>Analogy:</strong> a replacement driver. If a company hires a substitute driver for a delivery van,
+                the substitute must still stop at red lights and deliver the parcel. Having a valid driving licence is not
+                enough if they behave differently on the road.
+              </p>
+              <p>
+                <strong>Typical breaks:</strong> a subclass <strong>throws</strong> where the base does not; it
+                <strong> ignores</strong> an input; it <strong>requires more</strong> than the base (stronger
+                preconditions); or it <strong>promises less</strong> than the base (weaker postconditions). The classic
+                example is Square-extends-Rectangle: mutable setters make the two classes behave differently, even though
+                "a square is a rectangle" in geometry.
+              </p>
+              <p>
+                <strong>How to spot it:</strong> a caller that writes <IC>if (x instanceof Subtype)</IC> before calling a
+                method. That check means the abstraction is leaking, and every new subtype will need another check.
+              </p>
+              <p>
+                <strong>Common misunderstanding:</strong> LSP is about <em>behaviour</em>, not about the type hierarchy
+                looking correct on paper. Prefer composition or a shared interface when the subtype only shares some
+                behaviour.
+              </p>
+            </Theory>
+            <WhenToUse items={[
+              'Overriding a method just to throw UnsupportedOperationException or return null',
+              'Callers that check instanceof before calling a method',
+              'A subclass that quietly changes what a setter, getter or equals() means',
+              'Tests that pass for the base class but fail for one subclass',
+            ]} />
+            <SolidLspDiagram />
+            <CodeBlock label="✗ Violation" code={CODE_LSP_BAD} />
+            <CodeBlock label="✓ Fix" code={CODE_LSP_GOOD} />
+          </MathCard>
+
+          <MathCard id="s-solid-isp" title="6.4 Interface Segregation Principle (ISP)" badge="I">
+            <Theory>
+              <p>
+                <strong>The idea:</strong> clients should not be forced to depend on methods they do not use. Prefer
+                several small, <strong>role-based</strong> interfaces over one general-purpose interface.
+              </p>
+              <p>
+                <strong>Analogy:</strong> a universal TV remote with 80 buttons versus a simple remote with the four
+                buttons you use. A robot does not need an "eat" button, and forcing one onto the design only creates
+                buttons that do nothing.
+              </p>
+              <p>
+                <strong>Why it matters:</strong> a fat interface couples every implementer to every method. When one
+                implementer cannot support a method, it either throws or leaves it empty, and both are lies to the caller.
+                Clients that only need one capability also end up depending on, and mocking, all the others.
+              </p>
+              <p>
+                <strong>How to spot it:</strong> implementations with empty bodies or <IC>UnsupportedOperationException</IC>,
+                and mocks that stub a dozen methods the test never calls.
+              </p>
+              <p>
+                <strong>Java note:</strong> a class can implement many interfaces, so splitting costs nothing at the call
+                site. Java's own <IC>Iterable</IC> versus <IC>Collection</IC> split is a good model: read-only iteration
+                does not require <IC>add()</IC>.
+              </p>
+            </Theory>
+            <WhenToUse items={[
+              'An interface with more than three or four methods where implementers differ',
+              'Implementations with empty bodies or UnsupportedOperationException',
+              'Mock objects in tests that must stub many methods they never use',
+              'Java collection-style APIs: a read-only client should not see add()/remove()',
+            ]} />
+            <SolidIspDiagram />
+            <CodeBlock label="✗ Violation" code={CODE_ISP_BAD} />
+            <CodeBlock label="✓ Fix" code={CODE_ISP_GOOD} />
+          </MathCard>
+
+          <MathCard id="s-solid-dip" title="6.5 Dependency Inversion Principle (DIP)" badge="D">
+            <Theory>
+              <p>
+                <strong>The idea:</strong> high-level policy (business rules) should not depend on low-level detail
+                (databases, vendors, APIs). Both should depend on an <strong>abstraction</strong>, and the concrete
+                implementation is <strong>supplied from outside</strong>.
+              </p>
+              <p>
+                <strong>Analogy:</strong> a lamp with a standard socket. The lamp does not care whether the power comes
+                from a wind farm or a coal plant; both just have to fit the socket. The socket is the abstraction.
+              </p>
+              <p>
+                <strong>The arrow flips:</strong> without DIP, <IC>OrderService → StripeGateway</IC>, so business logic
+                is hostage to a vendor. With DIP, both point at <IC>PaymentGateway</IC>, and the wiring lives in
+                <IC>main()</IC> or a DI container.
+              </p>
+              <p>
+                <strong>Why it matters:</strong> the business logic becomes unit-testable with a fake gateway, and
+                switching vendors touches only one wiring line instead of every class that charges a card.
+              </p>
+              <p>
+                <strong>Common misunderstanding:</strong> DIP is not the same as dependency injection. DI is the
+                <em> technique</em> (constructor, setter or framework injection). DIP is the <em>principle</em>: depend on
+                abstractions. You can use DI with concrete classes and still violate DIP.
+              </p>
+            </Theory>
+            <WhenToUse items={[
+              'Business classes that call new SomeConcreteClass() for external services',
+              'Hard to write a unit test without a database, network, or file system',
+              'Swapping implementations (Stripe → PayPal, local disk → S3, email → SMS) is painful',
+              'Spring: @Service classes that depend on @Repository or @Component beans via interfaces',
+            ]} />
+            <SolidDipDiagram />
+            <CodeBlock label="✗ Violation" code={CODE_DIP_BAD} />
+            <CodeBlock label="✓ Fix" code={CODE_DIP_GOOD} />
+          </MathCard>
+
+        </section>
+
+        {/* ══════════════════════  PART 7  ══════════════════════ */}
+        <section id="part7" className="mb-14 scroll-mt-4">
+          <PartHeading badge="Part 7" id="part7">Interview Coding Tips</PartHeading>
+
+          <MathCard id="s-io-scanner" title="7.1 Input with Scanner" badge="simple">
+            <Theory>
+              <p>
+                <strong>The idea:</strong> <IC>Scanner</IC> reads tokens (words, numbers) separated by whitespace. It is
+                the easiest reader to write and understands mixed types well, but it is slow for large input because it
+                uses regular expressions internally.
+              </p>
+              <p>
+                <strong>Classic trap:</strong> after <IC>nextInt()</IC>, the newline is still in the buffer. A following
+                <IC>nextLine()</IC> returns an empty string. Call <IC>nextLine()</IC> once to consume it.
+              </p>
+              <p>
+                <strong>When to use:</strong> small input (roughly 10⁴ values or fewer), or when you are writing a quick
+                local experiment and speed does not matter.
+              </p>
+            </Theory>
+            <WhenToUse items={[
+              'Input is small and mixes types on one line: "3 hello 4.5"',
+              'Interview whiteboard problems where the input is described as a few lines',
+              'You want the least boilerplate and have no time pressure from input size',
+            ]} />
+            <CodeBlock label="Scanner template" code={CODE_IO_SCANNER} />
+          </MathCard>
+
+          <MathCard id="s-io-fast" title="7.2 Fast Input: BufferedReader + FastReader" badge="10⁵–10⁶ values">
+            <Theory>
+              <p>
+                <strong>The idea:</strong> <IC>BufferedReader</IC> reads big chunks of the input at once, and
+                <IC>StringTokenizer</IC> splits each line by spaces without regular expressions. Together they are
+                typically several times faster than <IC>Scanner</IC> on large input.
+              </p>
+              <p>
+                <strong>Why a wrapper:</strong> the raw version assumes one value per line. A <IC>FastReader</IC> keeps a
+                token buffer and fetches the next line only when empty, so it also works when one row of numbers is split
+                across lines. Memorise it once; it is the single most useful input template in competitive Java.
+              </p>
+              <p>
+                <strong>Rule:</strong> never mix <IC>nextLine()</IC> with token reads on the same line. If you need a
+                full line after tokens, read the tokens of the line first and then call <IC>nextLine()</IC> on the next line.
+              </p>
+            </Theory>
+            <WhenToUse items={[
+              'n up to 10⁵ or 10⁶ with values on several lines',
+              'Any problem where a Scanner-based solution would be "accepted but slow"',
+              'Graph problems with many edges read as "u v" pairs',
+            ]} />
+            <InputDecisionDiagram />
+            <CodeBlock label="Raw BufferedReader" code={CODE_IO_FAST} />
+            <CodeBlock label="FastReader (recommended template)" code={CODE_IO_FASTREADER} />
+          </MathCard>
+
+          <MathCard id="s-io-types" title="7.3 Reading Every Common Input Type" badge="cheat">
+            <Theory>
+              <p>
+                Most interview and contest inputs follow a small set of shapes. Decide the shape first (single value,
+                array, grid, graph, multiple test cases), then use the matching reader line. The table below maps each
+                shape to its code.
+              </p>
+            </Theory>
+            <CheatTable headers={['Input shape', 'Read with', 'Notes']}>
+              <TR cells={['int / long / double', <Mono>fr.nextInt()</Mono>, 'Use nextLong() when values can reach 10¹⁸']} />
+              <TR cells={['One word (no spaces)', <Mono>fr.next()</Mono>, 'Returns a String token']} />
+              <TR cells={['Sentence with spaces', <Mono>br.readLine()</Mono>, 'Only on a fresh line, not after token reads']} />
+              <TR cells={['Single char', <Mono>fr.next().charAt(0)</Mono>, 'Or toCharArray() for a whole string']} />
+              <TR cells={['1-D array of n', <Mono>for i &lt; n: fr.nextInt()</Mono>, 'Allocate int[n] before the loop']} />
+              <TR cells={['2-D grid r × c', <Mono>g[i][j] = fr.nextInt()</Mono>, 'Row-major: outer loop rows, inner columns']} />
+              <TR cells={['Char grid (maze)', <Mono>fr.next().toCharArray()</Mono>, 'Each row has no spaces']} />
+              <TR cells={['Graph: m edges', <Mono>u = nextInt(), v = nextInt()</Mono>, 'Size adjacency list n+1 for 1-indexed nodes']} />
+              <TR cells={['Weighted edges', <Mono>int[m][3]</Mono>, 'Sort by weight for Kruskal / Prim']} />
+              <TR cells={['Multiple test cases', <Mono>while (t-- &gt; 0)</Mono>, 'Reset every array and map inside the loop']} />
+              <TR cells={['Until end of input', <Mono>catch (EOFException)</Mono>, 'Alternative: check hasNextInt() with Scanner']} />
+            </CheatTable>
+            <CodeBlock label="All shapes in one place" code={CODE_IO_TYPES} />
+          </MathCard>
+
+          <MathCard id="s-io-output" title="7.4 Fast Output" badge="print once">
+            <Theory>
+              <p>
+                <strong>The idea:</strong> <IC>System.out.println</IC> is synchronised and flushes on each call. A loop of
+                10⁵ prints can take noticeable time. Collect the output and print it once, or wrap the output stream
+                in a <IC>PrintWriter</IC> over a <IC>BufferedWriter</IC>.
+              </p>
+              <p>
+                <strong>Critical:</strong> a <IC>PrintWriter</IC> buffers output in memory. If you forget
+                <IC>out.flush()</IC> at the end, the program exits and the answer is never printed. This is the most common
+                "no output" bug with fast I/O.
+              </p>
+            </Theory>
+            <CodeBlock label="Output patterns" code={CODE_IO_OUTPUT} />
+          </MathCard>
+
+          <MathCard id="s-tips-flow" title="7.5 Interview Flow: how to talk through a problem" badge="45 min">
+            <Theory>
+              <p>
+                <strong>The idea:</strong> interviewers score the process. A correct solution reached in silence scores less
+                than a good approach explained step by step, even if the code needs a small fix. Follow the same order
+                every time so the steps become automatic.
+              </p>
+              <p>
+                <strong>Say out loud:</strong> what you are doing and why. "I'll try a brute force first to get a correct
+                baseline, then look for the repeated work." Silence for more than a minute is the biggest risk.
+              </p>
+            </Theory>
+            <InterviewFlowDiagram />
+            <CheatTable headers={['Step', 'What to say or do', 'Time']}>
+              <TR cells={['Clarify', 'Restate the problem. Ask about input size, value ranges, duplicates, negatives, empty input, return format', '3–5 min']} />
+              <TR cells={['Examples', 'Work a small example by hand. Write one extra tricky example (duplicates, single element)', '2–3 min']} />
+              <TR cells={['Brute force', 'State the simple solution and its complexity. This is your safety net', '2 min']} />
+              <TR cells={['Optimise', 'Name the bottleneck (repeated search? sorting? recomputation?) and the pattern from Part 3', '5 min']} />
+              <TR cells={['Code', 'Clean names, one helper per idea, narrate each block', '15–20 min']} />
+              <TR cells={['Test', 'Dry-run your code on the example. Then try edge cases from 7.6', '5 min']} />
+              <TR cells={['Complexity', 'State time and space, explain why, mention alternatives and trade-offs', '2 min']} />
+            </CheatTable>
+          </MathCard>
+
+          <MathCard id="s-tips-edge" title="7.6 Edge Case Checklist" badge="check before submitting">
+            <Theory>
+              <p>
+                Most failed interview submissions fail on an edge case, not on the main idea. Run through this list
+                before saying "done". You do not need every item on every problem, but ask yourself each one.
+              </p>
+            </Theory>
+            <div className="grid sm:grid-cols-2 gap-2 my-3">
+              {[
+                ['Empty input', 'n = 0, empty string, empty list'],
+                ['Single element', 'n = 1: loops that assume two elements break here'],
+                ['All equal / all same', 'duplicates can break two-pointer or sort-based logic'],
+                ['Sorted or reversed', 'worst cases for quicksort-style partitioning and naive BST'],
+                ['Negative numbers', 'modulo of negatives, sums going below zero, abs()'],
+                ['Overflow limits', 'Integer.MAX_VALUE + 1, products of large values, use long'],
+                ['Target not present', 'binary search returns -1 or insertion point; handle "not found"'],
+                ['Disconnected graph', 'run BFS/DFS from every unvisited node, not just node 1'],
+                ['Cycle present', 'topological sort must detect a cycle; DFS needs a visiting state'],
+                ['Off-by-one', 'check < vs <=, 0- vs 1-indexed, substring end index exclusive'],
+                ['Multiple test cases', 'reset arrays, maps, counters, visited sets between cases'],
+                ['Output format', 'trailing spaces, newline per test, the exact expected type'],
+              ].map(([title, desc]) => (
+                <div key={title} className="rounded-lg border border-[#21262d] bg-[#0d1117] px-3 py-2">
+                  <p className="text-[12.5px] font-semibold text-gray-200">☐ {title}</p>
+                  <p className="text-[11.5px] text-gray-500 leading-snug">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </MathCard>
+
+          <MathCard id="s-tips-java" title="7.7 Java Pitfalls in Interviews" badge="bugs to avoid">
+            <Theory>
+              <p>
+                These bugs cost more interview time than any algorithm mistake, because they look correct while reading.
+                Each one below has a fix you can write in one line.
+              </p>
+            </Theory>
+            <WarnBox>
+              Overflow, reference comparison and removing from a list by index are the three bugs that appear most often
+              in Java interview submissions. Check each one when you finish writing the solution.
+            </WarnBox>
+            <CodeBlock label="Pitfalls and fixes" code={CODE_TIPS_PITFALLS} />
+            <CodeBlock label="Deep recursion: avoid StackOverflowError" code={CODE_TIPS_DEEP} />
+          </MathCard>
+
+          <MathCard id="s-tips-tmpl" title="7.8 Solution Template" badge="copy and reuse">
+            <Theory>
+              <p>
+                <strong>The idea:</strong> keep one template you can paste in seconds, so the first minute of every
+                problem is spent on the problem, not on boilerplate. Put input reading in one place, the logic in
+                <IC>solve()</IC>, and output in one place.
+              </p>
+              <p>
+                <strong>Tip:</strong> in an interview you can ignore the multiple-test-case loop if the problem has a
+                single case. Keep the reader and the writer, because they cost nothing and prevent most I/O bugs.
+              </p>
+            </Theory>
+            <CodeBlock label="Template" code={CODE_TIPS_TEMPLATE} />
           </MathCard>
 
         </section>

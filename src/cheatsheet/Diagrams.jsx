@@ -740,6 +740,235 @@ export function MasterThmTree() {
   );
 }
 
+// ─── SOLID diagram helpers ────────────────────────────────────────────────────
+
+const SOLID_TONES = {
+  blue:  'bg-blue-500/15 border-blue-500/40 text-blue-200',
+  red:   'bg-red-500/15 border-red-500/40 text-red-200',
+  green: 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200',
+  amber: 'bg-amber-500/15 border-amber-500/40 text-amber-200',
+  gray:  'bg-gray-800/60 border-[#374151] text-gray-300',
+};
+
+function DNode({ children, tone = 'blue', wide = false }) {
+  return (
+    <div className={`px-3 py-2 rounded-lg border font-mono text-[11px] text-center leading-snug ${wide ? 'w-full' : ''} ${SOLID_TONES[tone]}`}>
+      {children}
+    </div>
+  );
+}
+
+function DArrow({ label }) {
+  return (
+    <div className="flex flex-col items-center text-[10px] text-gray-500 font-mono leading-tight">
+      <span>│</span>
+      {label && <span className="text-gray-400 whitespace-nowrap">{label}</span>}
+      <span>▼</span>
+    </div>
+  );
+}
+
+function SolidColumn({ tone, heading, children }) {
+  return (
+    <div className="flex flex-col items-center gap-2 w-full">
+      <span className={`text-[10px] font-bold uppercase tracking-wider ${tone === 'red' ? 'text-red-400' : 'text-emerald-400'}`}>{heading}</span>
+      {children}
+    </div>
+  );
+}
+
+// ─── 14. SOLID — Single Responsibility ────────────────────────────────────────
+
+export function SolidSrpDiagram() {
+  return (
+    <DiagramWrap
+      title="SRP — one class, many reasons to change → split by responsibility"
+      note="Ask: 'Who would ask me to change this class?' If the answer is more than one person or team, it has more than one responsibility."
+    >
+      <div className="grid md:grid-cols-2 gap-6 w-full">
+        <SolidColumn tone="red" heading="✗ Violates SRP">
+          <DNode tone="red" wide>ReportService</DNode>
+          <div className="text-[10.5px] text-gray-500 font-mono text-center">format() · save() · email()</div>
+          <div className="text-[10.5px] text-red-300 font-mono text-center">changes for: layout, DB schema, SMTP config</div>
+        </SolidColumn>
+        <SolidColumn tone="green" heading="✓ Follows SRP">
+          <DNode tone="green" wide>ReportService (orchestrates only)</DNode>
+          <DArrow />
+          <div className="grid grid-cols-3 gap-2 w-full">
+            <DNode>ReportFormatter</DNode>
+            <DNode>ReportRepository</DNode>
+            <DNode>ReportMailer</DNode>
+          </div>
+        </SolidColumn>
+      </div>
+    </DiagramWrap>
+  );
+}
+
+// ─── 15. SOLID — Open/Closed ──────────────────────────────────────────────────
+
+export function SolidOcpDiagram() {
+  return (
+    <DiagramWrap
+      title="OCP — add behaviour by adding a class, not by editing an if/else chain"
+      note="DiscountCalculator never changes again. A new discount type is a new class that implements the existing interface."
+    >
+      <div className="flex flex-col items-center gap-1 w-full">
+        <DNode tone="green" wide>DiscountCalculator  (closed: never edited)</DNode>
+        <DArrow label="depends on" />
+        <DNode tone="amber" wide>«interface» DiscountPolicy  →  double apply(double price)</DNode>
+        <DArrow label="implemented by" />
+        <div className="grid grid-cols-3 gap-2 w-full">
+          <DNode>RegularDiscount</DNode>
+          <DNode>PremiumDiscount</DNode>
+          <DNode tone="green">SeasonalDiscount  ← new, zero edits</DNode>
+        </div>
+      </div>
+    </DiagramWrap>
+  );
+}
+
+// ─── 16. SOLID — Liskov Substitution ──────────────────────────────────────────
+
+export function SolidLspDiagram() {
+  return (
+    <DiagramWrap
+      title="LSP — a subtype must honour the behavioural contract of its base type"
+      note="If code that works with a Rectangle breaks when handed a Square, the inheritance is wrong — even though 'a square is a rectangle' in maths."
+    >
+      <div className="grid md:grid-cols-2 gap-6 w-full">
+        <SolidColumn tone="red" heading="✗ Square extends Rectangle">
+          <DNode tone="gray" wide>Rectangle: setWidth(w), setHeight(h)</DNode>
+          <DArrow label="extends" />
+          <DNode tone="red" wide>Square: setWidth also sets height</DNode>
+          <div className="text-[10.5px] text-red-300 font-mono text-center leading-relaxed">
+            r.setWidth(5); r.setHeight(4);<br/>area() → 16  (caller expected 20)
+          </div>
+        </SolidColumn>
+        <SolidColumn tone="green" heading="✓ Shared abstraction">
+          <DNode tone="gray" wide>«interface» Shape: int area()</DNode>
+          <DArrow label="implemented by" />
+          <div className="grid grid-cols-2 gap-2 w-full">
+            <DNode>Rectangle(width, height)</DNode>
+            <DNode>Square(side)</DNode>
+          </div>
+          <div className="text-[10.5px] text-emerald-300 font-mono text-center">Both honour area(); no hidden setter coupling</div>
+        </SolidColumn>
+      </div>
+    </DiagramWrap>
+  );
+}
+
+// ─── 17. SOLID — Interface Segregation ────────────────────────────────────────
+
+export function SolidIspDiagram() {
+  return (
+    <DiagramWrap
+      title="ISP — many small role interfaces beat one fat interface"
+      note="If an implementer throws UnsupportedOperationException or leaves a method empty, the interface is too big."
+    >
+      <div className="grid md:grid-cols-2 gap-6 w-full">
+        <SolidColumn tone="red" heading="✗ One fat interface">
+          <DNode tone="red" wide>Worker: work() · eat() · sleep()</DNode>
+          <DArrow label="implemented by" />
+          <DNode tone="red" wide>Robot</DNode>
+          <div className="text-[10.5px] text-red-300 font-mono text-center">eat() and sleep() must throw — forced to lie</div>
+        </SolidColumn>
+        <SolidColumn tone="green" heading="✓ Segregated roles">
+          <div className="grid grid-cols-3 gap-2 w-full">
+            <DNode>Workable</DNode>
+            <DNode>Eatable</DNode>
+            <DNode>Sleepable</DNode>
+          </div>
+          <DArrow label="Robot implements" />
+          <DNode tone="green" wide>Robot → Workable only</DNode>
+        </SolidColumn>
+      </div>
+    </DiagramWrap>
+  );
+}
+
+// ─── 18. SOLID — Dependency Inversion ─────────────────────────────────────────
+
+export function SolidDipDiagram() {
+  return (
+    <DiagramWrap
+      title="DIP — depend on abstractions; inject the concrete implementation"
+      note="OrderService can be unit-tested with a fake gateway, and switching payment providers touches no business logic."
+    >
+      <div className="grid md:grid-cols-2 gap-6 w-full">
+        <SolidColumn tone="red" heading="✗ Concrete dependency">
+          <DNode tone="red" wide>OrderService (high-level)</DNode>
+          <DArrow label="new StripeGateway()" />
+          <DNode tone="red" wide>StripeGateway (low-level)</DNode>
+          <div className="text-[10.5px] text-red-300 font-mono text-center">business logic is tied to one vendor</div>
+        </SolidColumn>
+        <SolidColumn tone="green" heading="✓ Inverted via interface">
+          <DNode tone="green" wide>OrderService (high-level)</DNode>
+          <DArrow label="depends on" />
+          <DNode tone="amber" wide>«interface» PaymentGateway</DNode>
+          <DArrow label="implemented by" />
+          <div className="grid grid-cols-2 gap-2 w-full">
+            <DNode>StripeGateway</DNode>
+            <DNode>PayPalGateway</DNode>
+          </div>
+        </SolidColumn>
+      </div>
+    </DiagramWrap>
+  );
+}
+
+// ─── 19. Interview Tips — input method decision ───────────────────────────────
+
+export function InputDecisionDiagram() {
+  return (
+    <DiagramWrap
+      title="Which Java input reader should I use?"
+      note="Rule of thumb: use the fastest reader that you can write without bugs under pressure. A FastReader template is worth memorising once."
+    >
+      <div className="flex flex-col items-center gap-1 w-full">
+        <DNode tone="amber" wide>How many numbers / tokens will the input contain?</DNode>
+        <DArrow label="small  (≤ ~10⁴)" />
+        <DNode tone="green" wide>Scanner  —  simplest, mixed types, fine for small input</DNode>
+        <div className="text-[10px] text-gray-500 font-mono">↓ larger  (10⁵ – 10⁶+)</div>
+        <DNode tone="blue" wide>BufferedReader + StringTokenizer  (or FastReader wrapper)</DNode>
+        <div className="text-[10px] text-gray-500 font-mono">↓ only numbers, no strings or lines, extreme speed needed</div>
+        <DNode tone="gray" wide>StreamTokenizer  —  fastest for pure numeric input, awkward for text</DNode>
+      </div>
+    </DiagramWrap>
+  );
+}
+
+// ─── 20. Interview Tips — seven-step flow ─────────────────────────────────────
+
+export function InterviewFlowDiagram() {
+  const steps = [
+    ['1', 'Clarify',     'inputs, outputs, constraints, edge cases'],
+    ['2', 'Examples',    'work one small case by hand'],
+    ['3', 'Brute force', 'state a correct baseline and its complexity'],
+    ['4', 'Optimise',    'find the bottleneck, pick a pattern from Part 3'],
+    ['5', 'Code',        'think aloud, clear names, small helper methods'],
+    ['6', 'Test',        'dry-run the examples and the edge cases'],
+    ['7', 'Complexity',  'state time and space, mention trade-offs'],
+  ];
+  return (
+    <DiagramWrap
+      title="Interview flow — seven steps in roughly 45 minutes"
+      note="Talking through each step matters as much as the final code. Interviewers grade the process, not just the answer."
+    >
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 w-full">
+        {steps.map(([n, title, desc]) => (
+          <div key={n} className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-2.5">
+            <div className="text-[10px] font-mono text-gray-500">STEP {n}</div>
+            <div className="text-[12px] font-semibold text-blue-200">{title}</div>
+            <div className="text-[10.5px] text-gray-400 leading-snug">{desc}</div>
+          </div>
+        ))}
+      </div>
+    </DiagramWrap>
+  );
+}
+
 // ─── 13. Call Stack Diagram ───────────────────────────────────────────────────
 
 export function CallStackDiagram() {
