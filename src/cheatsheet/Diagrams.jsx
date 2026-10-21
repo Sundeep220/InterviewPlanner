@@ -969,6 +969,123 @@ export function InterviewFlowDiagram() {
   );
 }
 
+// ─── 21. Catalan — root-split recurrence for n = 4 ────────────────────────────
+
+const catalanVals = (N) => {
+  const C = [1];
+  for (let n = 1; n <= N; n++) {
+    let s = 0;
+    for (let i = 0; i < n; i++) s += C[i] * C[n - 1 - i];
+    C.push(s);
+  }
+  return C;
+};
+
+export function CatalanRecurrenceDiagram() {
+  const N = 4;
+  const C = catalanVals(N);
+  const splits = Array.from({ length: N }, (_, k) => ({
+    root: k + 1, left: k, right: N - 1 - k, ways: C[k] * C[N - 1 - k],
+  }));
+  const total = splits.reduce((a, s) => a + s.ways, 0);
+
+  return (
+    <DiagramWrap
+      title={`Recurrence: C(${N}) = Σ C(i) · C(${N - 1} − i) — split by the root`}
+      note="Each choice of root splits the remaining nodes into a left group and a right group. The left and right shapes are chosen independently, so their counts multiply."
+    >
+      <div className="w-full space-y-1.5 font-mono text-[11.5px]">
+        <div className="grid grid-cols-[auto_1fr_auto] gap-x-3 text-[10px] text-gray-500 uppercase tracking-wider pb-1 border-b border-[#21262d]">
+          <span>root</span><span>left · right</span><span className="text-right">ways</span>
+        </div>
+        {splits.map(s => (
+          <div key={s.root} className="grid grid-cols-[auto_1fr_auto] gap-x-3 items-center">
+            <span className="w-16 text-center rounded border border-blue-500/40 bg-blue-500/15 text-blue-200 py-0.5">k = {s.root}</span>
+            <span className="flex items-center gap-2 text-gray-300">
+              <span className="px-2 py-0.5 rounded border border-violet-500/40 bg-violet-500/10 text-violet-200">C({s.left}) = {C[s.left]}</span>
+              <span className="text-gray-600">×</span>
+              <span className="px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-200">C({s.right}) = {C[s.right]}</span>
+            </span>
+            <span className="text-right text-white">{s.ways}</span>
+          </div>
+        ))}
+        <div className="grid grid-cols-[auto_1fr_auto] gap-x-3 pt-2 border-t border-[#21262d] font-bold">
+          <span className="text-gray-400">sum</span>
+          <span className="text-gray-400">{splits.map(s => s.ways).join(' + ')}</span>
+          <span className="text-right text-amber-300">= {total}</span>
+        </div>
+      </div>
+    </DiagramWrap>
+  );
+}
+
+// ─── 22. Catalan — values and closed form ─────────────────────────────────────
+
+export function CatalanTableDiagram() {
+  const N = 9;
+  const C = catalanVals(N);
+  const fact = (k) => { let f = 1; for (let i = 2; i <= k; i++) f *= i; return f; };
+  const maxV = C[N];
+
+  return (
+    <DiagramWrap
+      title="Catalan values and the closed form  Cₙ = C(2n, n) / (n + 1)"
+      note="The values grow roughly like 4ⁿ / n^1.5, so they explode quickly. Use long up to about n = 25, then switch to modular arithmetic."
+    >
+      <div className="w-full grid grid-cols-[auto_auto_1fr] gap-x-3 gap-y-1.5 items-center font-mono text-[11.5px]">
+        <span className="text-[10px] text-gray-500 uppercase">n</span>
+        <span className="text-[10px] text-gray-500 uppercase">Cₙ</span>
+        <span className="text-[10px] text-gray-500 uppercase">size of Cₙ (relative)</span>
+        {C.map((v, n) => (
+          <div key={n} className="contents">
+            <span className="text-gray-400 w-6 text-center">{n}</span>
+            <span className="text-white font-semibold w-16 text-right pr-2">{v}</span>
+            <span className="h-3 rounded-sm bg-gradient-to-r from-violet-600/70 to-blue-500/70"
+              style={{ width: `${Math.max(2, (Math.log(v) / Math.log(maxV)) * 100)}%` }} />
+          </div>
+        ))}
+      </div>
+      <div className="w-full mt-2 rounded-lg border border-[#21262d] bg-[#0d1117] px-3 py-2 font-mono text-[11px] text-gray-300 space-y-0.5">
+        <div>C(4) = (2·4)! / (4! · 5!) = {fact(8)} / ({fact(4)} · {fact(5)}) = <span className="text-amber-300">{fact(8) / (fact(4) * fact(5))}</span></div>
+        <div className="text-gray-500">bar length is log-scaled so the small values stay visible</div>
+      </div>
+    </DiagramWrap>
+  );
+}
+
+// ─── 23. Catalan — where they appear ──────────────────────────────────────────
+
+export function CatalanApplicationsDiagram() {
+  const C = catalanVals(10);
+  const cards = [
+    { title: 'Balanced brackets',   what: 'Valid sequences of n pairs', ex: 'n = 3 → ((())), (()()), (())(), ()(()), ()()()', val: C[3] },
+    { title: 'Binary search trees', what: 'Distinct BST shapes with n keys', ex: 'n = 3 keys {1,2,3} → 5 different trees', val: C[3] },
+    { title: 'Dyck paths',          what: 'Up/down paths that never dip below the start', ex: 'n = 3 → 5 paths from (0,0) to (6,0)', val: C[3] },
+    { title: 'Triangulations',      what: 'Ways to cut a convex (n+2)-gon into triangles', ex: 'hexagon (n = 4) → 14 triangulations', val: C[4] },
+    { title: 'Non-crossing pairs',  what: 'Pair up 2n points on a circle with no crossing chords', ex: '3 pairs of 6 points → 5 layouts', val: C[3] },
+    { title: 'Stack-sortable',      what: 'Permutations of n that one stack can sort', ex: 'n = 3 → 5 of the 6 permutations', val: C[3] },
+  ];
+  return (
+    <DiagramWrap
+      title="Where Catalan numbers appear — same count, different disguises"
+      note="When a problem asks for 'the number of valid / non-crossing / nested / binary-tree structures of size n', check whether the answer is Cₙ before deriving a new recurrence."
+    >
+      <div className="grid sm:grid-cols-2 gap-2 w-full">
+        {cards.map(c => (
+          <div key={c.title} className="rounded-lg border border-[#21262d] bg-[#0d1117] p-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[12px] font-semibold text-gray-200">{c.title}</span>
+              <span className="text-[11px] font-mono px-1.5 py-0.5 rounded border border-amber-500/40 bg-amber-500/10 text-amber-300">= {c.val}</span>
+            </div>
+            <div className="text-[11px] text-gray-400 leading-snug mt-0.5">{c.what}</div>
+            <div className="text-[10.5px] font-mono text-gray-500 mt-1">{c.ex}</div>
+          </div>
+        ))}
+      </div>
+    </DiagramWrap>
+  );
+}
+
 // ─── 13. Call Stack Diagram ───────────────────────────────────────────────────
 
 export function CallStackDiagram() {

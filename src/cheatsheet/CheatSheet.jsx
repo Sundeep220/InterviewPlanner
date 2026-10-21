@@ -6,6 +6,7 @@ import {
   FibTreeDiagram, MasterThmTree, CallStackDiagram,
   SolidSrpDiagram, SolidOcpDiagram, SolidLspDiagram, SolidIspDiagram, SolidDipDiagram,
   InputDecisionDiagram, InterviewFlowDiagram,
+  CatalanRecurrenceDiagram, CatalanTableDiagram, CatalanApplicationsDiagram,
 } from './Diagrams.jsx';
 
 // ─── Base primitives ──────────────────────────────────────────────────────────
@@ -607,19 +608,66 @@ inv[n] = fastPow(fact[n], MOD - 2, MOD);
 for (int i = n - 1; i >= 1; i--) inv[i] = inv[i + 1] * (i + 1) % MOD;
 // nCr(n, r) = fact[n] * inv[r] % MOD * inv[n-r] % MOD`;
 
-const CODE_48 = `// ── Catalan numbers — O(n) DP ────────────────────────────────────────────────
-long[] catalan(int n) {
+const CODE_CAT_DP = `// ── 1. Recurrence (DP) — O(n²) time, O(n) space ─────────────────────────────
+// C[i] = Σ_{j=0}^{i-1} C[j] · C[i-1-j]       C[0] = 1
+static final long MOD = 1_000_000_007L;
+
+long[] catalanDP(int n) {
     long[] C = new long[n + 1];
-    C[0] = C[1] = 1;
-    for (int i = 2; i <= n; i++) {
-        C[i] = 0;
-        for (int j = 0; j < i; j++)
-            C[i] = (C[i] + C[j] * C[i - 1 - j]) % MOD;
-        // Equivalently: C[i] = nCr(2i, i) / (i + 1)
-    }
+    C[0] = 1;
+    for (int i = 1; i <= n; i++)
+        for (int j = 0; j < i; j++)                       // split at root j
+            C[i] = (C[i] + C[j] * C[i - 1 - j]) % MOD;     // product fits in long
     return C;
 }
-// First 8 Catalan numbers: 1, 1, 2, 5, 14, 42, 132, 429`;
+// Without MOD (exact, small n):  1, 1, 2, 5, 14, 42, 132, 429, 1430, 4862 …`;
+
+const CODE_CAT_CLOSED = `// ── 2. Closed form  Cₙ = (2n)! / (n! · (n+1)!)  — O(n) time, O(n) space ─────
+// Needs MOD prime and fastPow from 4.5.  Use when you need ONE Catalan number.
+long catalanClosed(int n) {
+    long[] f = new long[2 * n + 2];
+    f[0] = 1;
+    for (int i = 1; i < f.length; i++) f[i] = f[i - 1] * i % MOD;   // factorials mod p
+
+    long denom = f[n] * f[n + 1] % MOD;                              // n! · (n+1)!
+    return f[2 * n] * fastPow(denom, MOD - 2, MOD) % MOD;            // divide via inverse
+}`;
+
+const CODE_CAT_PRODUCT = `// ── 3. Product form  Cₖ = Cₖ₋₁ · 2(2k−1) / (k+1)  — O(n) time, O(1) space ──
+// Exact: every intermediate value is an integer, so the division never loses bits.
+long catalanExact(int n) {          // safe in a long up to about n = 25
+    long c = 1;
+    for (int k = 1; k <= n; k++)
+        c = c * 2 * (2 * k - 1) / (k + 1);
+    return c;
+}
+
+// Same idea modulo a prime: divide by (k+1) using its inverse
+long catalanMod(int n) {
+    long c = 1;
+    for (int k = 1; k <= n; k++)
+        c = c * 2 % MOD * (2 * k - 1) % MOD * fastPow(k + 1, MOD - 2, MOD) % MOD;
+    return c;
+}`;
+
+const CODE_CAT_GENERATE = `// ── 4. Generate the objects, not just count them ─────────────────────────────
+// All valid bracket strings with n pairs — there are exactly Cₙ of them.
+// Open a '(' whenever you still can; close a ')' only if it matches an open one.
+void generate(int open, int close, int n, StringBuilder cur, List<String> out) {
+    if (cur.length() == 2 * n) { out.add(cur.toString()); return; }
+    if (open < n) {                       // can still open
+        cur.append('(');
+        generate(open + 1, close, n, cur, out);
+        cur.deleteCharAt(cur.length() - 1);
+    }
+    if (close < open) {                   // a matching '(' is waiting to close
+        cur.append(')');
+        generate(open, close + 1, n, cur, out);
+        cur.deleteCharAt(cur.length() - 1);
+    }
+}
+// generate(0, 0, 3, new StringBuilder(), out)
+//   → ((())), (()()), (())(), ()(()), ()()()     out.size() == C(3) == 5`;
 
 const CODE_49 = `// ── Iterative Fibonacci — O(n) time, O(1) space ─────────────────────────────
 // Naive recursion is O(2^n)! Always use iterative or memoized version.
@@ -1585,33 +1633,63 @@ export default function CheatSheet() {
           <MathCard id="s-catalan" title="4.8 Catalan Numbers">
             <Theory>
               <p>
-                Catalan numbers count a surprisingly broad set of combinatorial structures — all from the
-                same recurrence. The n-th Catalan number is: <IC>Cₙ = Σ C(i)·C(n−1−i)</IC> for i=0…n−1.
-                Equivalently: <IC>Cₙ = C(2n, n) / (n+1)</IC>.
+                <strong>What it is:</strong> the Catalan numbers <IC>C₀, C₁, C₂, …</IC> are the sequence
+                <IC> 1, 1, 2, 5, 14, 42, 132, 429, 1430, …</IC>. The n-th term, <IC>Cₙ</IC>, is the number of
+                distinct structures of size n that share one hidden shape: a balanced, non-crossing, or
+                "split at one point" arrangement. The problem is always the same count, just described differently.
               </p>
               <p>
-                <strong>Intuition for the recurrence</strong>: imagine the root of a BST with n nodes.
-                If the root is node i+1 (1-indexed), there are i nodes in the left subtree and n−1−i in
-                the right. The count for each subtree is independent, so we multiply and sum over all choices.
+                <strong>Recurrence (the definition to memorise):</strong> <IC>C₀ = 1</IC> and
+                <IC> Cₙ = Σ<sub>i=0</sub><sup>n−1</sup> Cᵢ · Cₙ₋₁₋ᵢ</IC>. Every structure of size n has a
+                "first split" point. Choose the split (i on one side, n−1−i on the other), count each side
+                independently, and multiply. Then add over all splits.
               </p>
               <p>
-                Sequence: <IC>1, 1, 2, 5, 14, 42, 132, 429, 1430, 4862, …</IC>
+                <strong>Closed form:</strong> <IC>Cₙ = C(2n, n) / (n+1) = (2n)! / (n! · (n+1)!)</IC>.
+                This avoids the O(n²) DP when you only need one value.
+              </p>
+              <p>
+                <strong>Product form:</strong> <IC>Cₖ = Cₖ₋₁ · 2(2k−1) / (k+1)</IC>, starting from <IC>C₀ = 1</IC>.
+                Check: C₃ = 2 · 2·5 / 4 = 5. This gives an O(n) loop with no factorials.
+              </p>
+              <p>
+                <strong>Why the recurrence works (intuition):</strong> take a valid bracket string. Its first
+                <IC> (</IC> is matched by exactly one <IC>)</IC>. Everything between them is a smaller valid
+                string, and everything after them is another. So the string splits into two independent smaller
+                strings: <IC>( inside ) rest</IC>. The same logic applies to BSTs, where the root splits the keys
+                into a left and a right subtree.
+              </p>
+              <p>
+                <strong>Growth:</strong> <IC>Cₙ ≈ 4ⁿ / (n^1.5 · √π)</IC>. The values grow exponentially, so use
+                <IC>long</IC> up to about n = 25, and switch to modular arithmetic beyond that.
+              </p>
+              <p>
+                <strong>Common confusion:</strong> <IC>Cₙ</IC> is not <IC>C(2n, n)</IC>. The central binomial
+                counts all paths; dividing by <IC>n+1</IC> keeps only the valid ones.
               </p>
             </Theory>
+            <CatalanRecurrenceDiagram />
+            <CatalanTableDiagram />
             <WhenToUse items={[
               'Count valid parenthesizations / bracket sequences of length 2n',
-              'Number of distinct BSTs with n keys (LeetCode #96)',
+              'Number of distinct BSTs with n keys (LeetCode #96 — Unique Binary Search Trees)',
               'Ways to triangulate a convex polygon with n+2 sides',
               'Number of monotonic lattice paths from (0,0) to (n,n) that stay below the diagonal',
               'Non-crossing handshakes between 2n people arranged in a circle',
+              'Problem wording: "how many valid / non-crossing / nested / binary-tree structures of size n"',
             ]} />
-            <Example title="C(5) = 42  and  valid bracket sequences for n=3">
-              {'First 8 values:  C(0)=1  C(1)=1  C(2)=2  C(3)=5\n                 C(4)=14 C(5)=42 C(6)=132\n\nC(3) = 5  →  valid sequences with 3 pairs:\n  ((()))   (()())   (())()   ()(())   ()()()'}
+            <CatalanApplicationsDiagram />
+            <Example title="C(3) = 5  — split each string as  ( inside )  rest">
+              {'String = ( A ) B,  A has i pairs, B has 3−1−i pairs\n\ni = 0:  A = ""      B has 2 pairs (2 ways)  →  ()(())   ()()()\ni = 1:  A has 1 pair (1 way)  B = "()"    →  (())()\ni = 2:  A has 2 pairs (2 ways)  B = ""    →  ((()))   (()())\n\n1·2 + 1·1 + 2·1 = 5  =  C(3)'}
             </Example>
-            <CodeBlock code={CODE_48} />
-            <Complexity time="O(n²) DP · O(n) via precomputed nCr" space="O(n)">
-              <p><strong>DP recurrence:</strong> outer loop 0…n; inner loop 0…i-1. Total iterations = 0+1+…+(n-1) = n(n-1)/2 → O(n²). The O(n) array for Catalan values is the only auxiliary space.</p>
-              <p><strong>Closed-form C(2n,n)/(n+1):</strong> with precomputed factorials this is O(1) per query (after O(n) precomputation). Choose this over DP when you only need one specific Catalan number.</p>
+            <CodeBlock label="1 · DP recurrence" code={CODE_CAT_DP} />
+            <CodeBlock label="2 · Closed form (single value)" code={CODE_CAT_CLOSED} />
+            <CodeBlock label="3 · Product form (O(1) space)" code={CODE_CAT_PRODUCT} />
+            <CodeBlock label="4 · Generate every structure" code={CODE_CAT_GENERATE} />
+            <Complexity time="O(n²) DP · O(n) closed form / product" space="O(n) DP table · O(1) product">
+              <p><strong>DP recurrence:</strong> outer loop 1…n; inner loop 0…i-1. Total iterations = 0+1+…+(n-1) = n(n-1)/2 → O(n²). Use it when you need every value C₀…Cₙ.</p>
+              <p><strong>Closed form (2n)!/(n!(n+1)!):</strong> computing the factorials is O(n), then one modular inverse costs O(log MOD). Use it for a single Cₙ.</p>
+              <p><strong>Product form:</strong> one multiply and one divide per step → O(n) time and O(1) space. It is exact in a <IC>long</IC> up to about n = 25.</p>
             </Complexity>
             <Related>Related: Problems/LogicBuilding/Medium/CatalanNumber.java · Problems/GoodProblems/CatalanNumber.java</Related>
           </MathCard>
